@@ -1,0 +1,17 @@
+# Go build output
+/bin/
+
+# Maven build output
+sidecar/target/
+sidecar/dependency-reduced-pom.xml
+
+# Node
+web/frontend/node_modules/
+web/frontend/.vite/
+
+# web/dist is intentionally NOT ignored — see CLAUDE.md. It's the embedded
+# frontend build; `make build-frontend` regenerates and commits it.
+
+# OS / editor cruft
+.DS_Store
+*.swp
