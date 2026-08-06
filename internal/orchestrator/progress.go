@@ -21,6 +21,11 @@ type Reporter struct {
 	tty     bool
 	noColor bool
 	mu      sync.Mutex
+	// afterSection is true immediately after Section() and false once
+	// anything else has been printed — Asset() uses it to avoid a
+	// doubled blank line right under a section title while still
+	// separating sibling assets from each other.
+	afterSection bool
 }
 
 // NewReporter builds a Reporter for w, auto-detecting whether it's an
@@ -53,6 +58,7 @@ func (r *Reporter) Section(title string) {
 	fmt.Fprintln(r.w)
 	fmt.Fprintln(r.w, title)
 	fmt.Fprintln(r.w)
+	r.afterSection = true
 }
 
 // Ok prints a top-level (2-space indent) completed step, e.g.
@@ -60,6 +66,7 @@ func (r *Reporter) Section(title string) {
 func (r *Reporter) Ok(label string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.afterSection = false
 	fmt.Fprintf(r.w, "  %s %s\n", r.check(), label)
 }
 
@@ -67,15 +74,22 @@ func (r *Reporter) Ok(label string) {
 func (r *Reporter) Fail(label string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.afterSection = false
 	fmt.Fprintf(r.w, "  %s %s\n", r.cross(), label)
 }
 
 // Asset begins reporting progress for one downloaded asset: prints its
 // label and the exact URL it's coming from (a static line, kept in
 // scrollback — the app's whole trust pitch is "one known origin," so
-// that origin is never hidden behind a vague "Downloading…").
+// that origin is never hidden behind a vague "Downloading…"). A blank
+// line separates it from whatever came before, except right under a
+// Section() header, which already provided that separation.
 func (r *Reporter) Asset(label, url string) *AssetProgress {
 	r.mu.Lock()
+	if !r.afterSection {
+		fmt.Fprintln(r.w)
+	}
+	r.afterSection = false
 	fmt.Fprintf(r.w, "  %s\n", label)
 	fmt.Fprintf(r.w, "    %s\n", url)
 	r.mu.Unlock()

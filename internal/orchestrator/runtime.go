@@ -97,7 +97,7 @@ func devRuntime() (*RuntimePaths, error) {
 // happens, so a fully-cached run never prints "Setting up…" at all.
 func ensureRuntimeArchive(ctx context.Context, cacheDir string, asset Asset, reporter *Reporter, announceSection func()) (string, error) {
 	runtimeDir := filepath.Join(cacheDir, "runtime")
-	javaBin := filepath.Join(runtimeDir, "bin", "java")
+	javaBin := filepath.Join(runtimeDir, "bin", javaExecutableName())
 
 	if _, err := os.Stat(javaBin); err == nil {
 		return javaBin, nil
