@@ -10,10 +10,14 @@ import org.apache.pdfbox.pdmodel.PDDocumentNameDictionary;
 import org.apache.pdfbox.pdmodel.PDEmbeddedFilesNameTreeNode;
 import org.apache.pdfbox.pdmodel.common.PDMetadata;
 import org.apache.pdfbox.pdmodel.common.filespecification.PDComplexFileSpecification;
+import org.mustangproject.BankDetails;
 import org.mustangproject.CalculatedInvoice;
 import org.mustangproject.TradeParty;
+import org.mustangproject.ZUGFeRD.IAbsoluteValueProvider;
+import org.mustangproject.ZUGFeRD.IZUGFeRDAllowanceCharge;
 import org.mustangproject.ZUGFeRD.IZUGFeRDExportableItem;
 import org.mustangproject.ZUGFeRD.IZUGFeRDExportableProduct;
+import org.mustangproject.ZUGFeRD.TransactionCalculator;
 import org.mustangproject.ZUGFeRD.ZUGFeRDImporter;
 import org.mustangproject.util.ByteArraySearcher;
 import org.mustangproject.validator.ValidationContext;
@@ -42,6 +46,7 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.EnumSet;
@@ -184,16 +189,83 @@ final class InspectHandler {
 
         TotalsDto totals = new TotalsDto(invoice.getTaxBasis(), invoice.getVATtotal(), invoice.getGrandTotal());
 
+        // getTaxBasis()/getVATtotal()/getGrandTotal() above trigger
+        // CalculatedInvoice.calculate() if it hasn't run yet, so
+        // getCalculation() is guaranteed non-null here. It's the
+        // IAbsoluteValueProvider mustang's own XML writers pass to
+        // IZUGFeRDAllowanceCharge.getTotalAmount() to resolve
+        // percentage-based allowances/charges against the line total —
+        // reusing it here instead of redoing that math ourselves.
+        TransactionCalculator basis = invoice.getCalculation();
+        List<AllowanceChargeDto> allowances = toAllowanceChargeDtos(invoice.getZFAllowances(), basis, false);
+        List<AllowanceChargeDto> charges = toAllowanceChargeDtos(invoice.getZFCharges(), basis, true);
+
+        List<String> notes = invoice.getNotes() == null ? List.of() : Arrays.asList(invoice.getNotes());
+
+        TradeParty paymentReceiver = invoice.getPayee() != null ? invoice.getPayee() : invoice.getSender();
+        PaymentMeansDto paymentMeans = toPaymentMeansDto(paymentReceiver);
+
         return new InvoiceDto(
                 invoice.getNumber(),
                 formatDate(invoice.getIssueDate()),
                 formatDate(invoice.getDueDate()),
+                formatDate(invoice.getDeliveryDate()),
                 invoice.getCurrency(),
                 invoice.getPaymentTermDescription(),
+                invoice.getReferenceNumber(),
+                invoice.getPaymentReference(),
                 toPartyDto(invoice.getSender()),
                 toPartyDto(invoice.getRecipient()),
                 lineItems,
-                totals);
+                totals,
+                allowances,
+                charges,
+                notes,
+                paymentMeans);
+    }
+
+    private static List<AllowanceChargeDto> toAllowanceChargeDtos(
+            IZUGFeRDAllowanceCharge[] items, IAbsoluteValueProvider basis, boolean isCharge) {
+        if (items == null) {
+            return List.of();
+        }
+        List<AllowanceChargeDto> result = new ArrayList<>();
+        for (IZUGFeRDAllowanceCharge item : items) {
+            // getTotalAmount() returns the allowance/charge's own pre-parsed
+            // ActualAmount when the source XML stated one directly, without
+            // even touching `basis` — only a percent-only allowance/charge
+            // needs `basis` to resolve an absolute amount, and that's null
+            // for imported invoices whose totals came straight from the XML
+            // rather than mustang's own recalculation (see toInvoiceDto's
+            // comment on getCalculation()). Degrade to null rather than
+            // force a recalculation that could diverge from what the
+            // document itself states.
+            BigDecimal amount;
+            try {
+                amount = item.getTotalAmount(basis);
+            } catch (RuntimeException e) {
+                amount = null;
+            }
+            result.add(new AllowanceChargeDto(
+                    isCharge, item.getReasonCode(), item.getReason(), item.getPercent(),
+                    item.getBasisAmount(), amount, item.getTaxCategoryCode(), item.getTaxRateApplicablePercent()));
+        }
+        return result;
+    }
+
+    private static PaymentMeansDto toPaymentMeansDto(TradeParty party) {
+        if (party == null) {
+            return null;
+        }
+        List<BankDetails> details = party.getBankDetails();
+        if (details == null || details.isEmpty()) {
+            return null;
+        }
+        BankDetails bd = details.get(0);
+        if (bd.getIBAN() == null && bd.getBIC() == null) {
+            return null;
+        }
+        return new PaymentMeansDto(bd.getIBAN(), bd.getBIC(), bd.getAccountName());
     }
 
     private static PartyDto toPartyDto(TradeParty party) {
@@ -315,8 +387,19 @@ final class InspectHandler {
     record TotalsDto(BigDecimal netTotal, BigDecimal vatTotal, BigDecimal grossTotal) {
     }
 
-    record InvoiceDto(String number, String issueDate, String dueDate, String currency, String paymentTerms,
-                       PartyDto seller, PartyDto buyer, List<LineItemDto> lineItems, TotalsDto totals) {
+    record AllowanceChargeDto(boolean charge, String reasonCode, String reason, BigDecimal percent,
+                               BigDecimal basisAmount, BigDecimal amount, String taxCategoryCode,
+                               BigDecimal taxRatePercent) {
+    }
+
+    record PaymentMeansDto(String iban, String bic, String accountName) {
+    }
+
+    record InvoiceDto(String number, String issueDate, String dueDate, String deliveryDate, String currency,
+                       String paymentTerms, String buyerReference, String paymentReference, PartyDto seller,
+                       PartyDto buyer, List<LineItemDto> lineItems, TotalsDto totals,
+                       List<AllowanceChargeDto> allowances, List<AllowanceChargeDto> charges, List<String> notes,
+                       PaymentMeansDto paymentMeans) {
     }
 
     record PdfMetadataDto(int pageCount, String pdfVersion, boolean encrypted, String producer, String creator,

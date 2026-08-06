@@ -33,16 +33,40 @@ export interface Totals {
   grossTotal: number;
 }
 
+export interface AllowanceCharge {
+  charge: boolean;
+  reasonCode: string | null;
+  reason: string | null;
+  percent: number | null;
+  basisAmount: number | null;
+  amount: number | null;
+  taxCategoryCode: string | null;
+  taxRatePercent: number | null;
+}
+
+export interface PaymentMeans {
+  iban: string | null;
+  bic: string | null;
+  accountName: string | null;
+}
+
 export interface Invoice {
   number: string;
   issueDate: string;
   dueDate: string | null;
+  deliveryDate: string | null;
   currency: string;
   paymentTerms: string | null;
+  buyerReference: string | null;
+  paymentReference: string | null;
   seller: Party;
   buyer: Party;
   lineItems: LineItem[];
   totals: Totals;
+  allowances: AllowanceCharge[];
+  charges: AllowanceCharge[];
+  notes: string[];
+  paymentMeans: PaymentMeans | null;
 }
 
 export interface PdfMetadata {

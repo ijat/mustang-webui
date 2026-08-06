@@ -49,6 +49,12 @@
       <dt class="m-0 mb-1 text-xs uppercase tracking-[0.06em] text-muted">Due date</dt>
       <dd class="m-0 text-md font-medium tabular-nums text-ink">{formatDate(invoice.dueDate)}</dd>
     </div>
+    {#if invoice.deliveryDate}
+      <div>
+        <dt class="m-0 mb-1 text-xs uppercase tracking-[0.06em] text-muted">Delivery date</dt>
+        <dd class="m-0 text-md font-medium tabular-nums text-ink">{formatDate(invoice.deliveryDate)}</dd>
+      </div>
+    {/if}
     <div>
       <dt class="m-0 mb-1 text-xs uppercase tracking-[0.06em] text-muted">Currency</dt>
       <dd class="m-0 text-md font-medium tabular-nums text-ink">{invoice.currency}</dd>
@@ -57,7 +63,42 @@
       <dt class="m-0 mb-1 text-xs uppercase tracking-[0.06em] text-muted">Payment terms</dt>
       <dd class="m-0 text-md font-medium text-ink">{invoice.paymentTerms ?? '—'}</dd>
     </div>
+    {#if invoice.buyerReference}
+      <div>
+        <dt class="m-0 mb-1 text-xs uppercase tracking-[0.06em] text-muted">Buyer reference</dt>
+        <dd class="m-0 text-md font-medium text-ink">{invoice.buyerReference}</dd>
+      </div>
+    {/if}
   </dl>
+
+  {#if invoice.paymentMeans || invoice.paymentReference}
+    <dl class="mb-[26px] grid grid-cols-2 gap-4 border border-hairline bg-surface-2 px-[18px] py-4 sm:grid-cols-3">
+      {#if invoice.paymentMeans?.iban}
+        <div>
+          <dt class="m-0 mb-1 text-xs uppercase tracking-[0.06em] text-muted">IBAN</dt>
+          <dd class="m-0 text-md font-medium tabular-nums text-ink">{invoice.paymentMeans.iban}</dd>
+        </div>
+      {/if}
+      {#if invoice.paymentMeans?.bic}
+        <div>
+          <dt class="m-0 mb-1 text-xs uppercase tracking-[0.06em] text-muted">BIC</dt>
+          <dd class="m-0 text-md font-medium tabular-nums text-ink">{invoice.paymentMeans.bic}</dd>
+        </div>
+      {/if}
+      {#if invoice.paymentMeans?.accountName}
+        <div>
+          <dt class="m-0 mb-1 text-xs uppercase tracking-[0.06em] text-muted">Account holder</dt>
+          <dd class="m-0 text-md font-medium text-ink">{invoice.paymentMeans.accountName}</dd>
+        </div>
+      {/if}
+      {#if invoice.paymentReference}
+        <div>
+          <dt class="m-0 mb-1 text-xs uppercase tracking-[0.06em] text-muted">Payment reference</dt>
+          <dd class="m-0 text-md font-medium text-ink">{invoice.paymentReference}</dd>
+        </div>
+      {/if}
+    </dl>
+  {/if}
 
   <div class="overflow-x-auto border border-hairline">
     <table class="w-full min-w-[560px] border-collapse text-base">
@@ -82,6 +123,26 @@
         {/each}
       </tbody>
       <tfoot>
+        {#each invoice.allowances as allowance, i (i)}
+          <tr>
+            <td colspan="4" class="border-t border-hairline px-3.5 py-2.5 font-sans tabular-nums text-muted">
+              Allowance{allowance.reason ? `: ${allowance.reason}` : ''}{allowance.percent != null ? ` (${allowance.percent}%)` : ''}
+            </td>
+            <td class="border-t border-hairline px-3.5 py-2.5 text-right font-sans tabular-nums text-muted">
+              {allowance.amount != null ? `−${formatMoney(allowance.amount, invoice.currency)}` : '—'}
+            </td>
+          </tr>
+        {/each}
+        {#each invoice.charges as charge, i (i)}
+          <tr>
+            <td colspan="4" class="border-t border-hairline px-3.5 py-2.5 font-sans tabular-nums text-muted">
+              Charge{charge.reason ? `: ${charge.reason}` : ''}{charge.percent != null ? ` (${charge.percent}%)` : ''}
+            </td>
+            <td class="border-t border-hairline px-3.5 py-2.5 text-right font-sans tabular-nums text-muted">
+              {charge.amount != null ? `+${formatMoney(charge.amount, invoice.currency)}` : '—'}
+            </td>
+          </tr>
+        {/each}
         <tr>
           <td colspan="4" class="border-t border-hairline px-3.5 py-2.5 font-sans tabular-nums">Net total</td>
           <td class="border-t border-hairline px-3.5 py-2.5 text-right font-sans tabular-nums">{formatMoney(invoice.totals.netTotal, invoice.currency)}</td>
@@ -97,4 +158,15 @@
       </tfoot>
     </table>
   </div>
+
+  {#if invoice.notes.length > 0}
+    <div class="mt-[26px]">
+      <h4 class="m-0 mb-2 text-xs font-medium uppercase tracking-[0.08em] text-muted">Notes</h4>
+      <ul class="m-0 flex flex-col gap-1.5 p-0">
+        {#each invoice.notes as note, i (i)}
+          <li class="list-none text-base text-muted">{note}</li>
+        {/each}
+      </ul>
+    </div>
+  {/if}
 {/if}
