@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -19,12 +20,20 @@ type Sidecar struct {
 	cmd     *exec.Cmd
 	BaseURL string
 	Token   string
+	Port    int
 }
 
 // StartSidecar launches the sidecar jar on a free loopback port, waits for
 // it to report healthy, and returns a handle to it. The caller must call
-// Stop when done.
-func StartSidecar(ctx context.Context, rt *RuntimePaths) (*Sidecar, error) {
+// Stop when done. reporter may be nil (used by tests).
+//
+// The JVM's own stdout/stderr is captured rather than connected directly
+// to ours — it's Java's own log noise, not part of the CLI's output, and
+// piping it straight through would interleave with the pretty progress
+// lines above. It's only surfaced (as part of the returned error) if the
+// sidecar fails to become healthy, where it's genuinely useful for
+// diagnosing why.
+func StartSidecar(ctx context.Context, rt *RuntimePaths, reporter *Reporter) (*Sidecar, error) {
 	port, err := freePort()
 	if err != nil {
 		return nil, fmt.Errorf("finding a free port: %w", err)
@@ -40,8 +49,9 @@ func StartSidecar(ctx context.Context, rt *RuntimePaths) (*Sidecar, error) {
 		"--port", strconv.Itoa(port),
 		"--token", token,
 	)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	var output bytes.Buffer
+	cmd.Stdout = &output
+	cmd.Stderr = &output
 
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("starting sidecar process: %w", err)
@@ -51,11 +61,19 @@ func StartSidecar(ctx context.Context, rt *RuntimePaths) (*Sidecar, error) {
 		cmd:     cmd,
 		BaseURL: fmt.Sprintf("http://127.0.0.1:%d", port),
 		Token:   token,
+		Port:    port,
 	}
 
 	if err := s.waitHealthy(ctx); err != nil {
 		_ = s.Stop()
+		if output.Len() > 0 {
+			return nil, fmt.Errorf("%w\n\nsidecar output:\n%s", err, output.String())
+		}
 		return nil, err
+	}
+
+	if reporter != nil {
+		reporter.Ok(fmt.Sprintf("Sidecar ready on 127.0.0.1:%d", port))
 	}
 
 	return s, nil

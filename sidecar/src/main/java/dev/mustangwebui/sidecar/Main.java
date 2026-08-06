@@ -39,9 +39,7 @@ public final class Main {
         server.createContext("/healthz", Main::handleHealthz);
 
         String expectedAuth = "Bearer " + token;
-        server.createContext("/api", exchange -> {
-            sendJson(exchange, 501, "{\"error\":\"not implemented yet\"}");
-        }).getFilters().add(bearerAuthFilter(expectedAuth));
+        server.createContext("/api", Main::routeApi).getFilters().add(bearerAuthFilter(expectedAuth));
 
         server.setExecutor(null);
         server.start();
@@ -53,6 +51,22 @@ public final class Main {
 
     private static void handleHealthz(HttpExchange exchange) throws IOException {
         sendJson(exchange, 200, "{\"status\":\"ok\"}");
+    }
+
+    private static void routeApi(HttpExchange exchange) throws IOException {
+        String path = exchange.getRequestURI().getPath();
+        String method = exchange.getRequestMethod();
+
+        if ("/api/inspect".equals(path)) {
+            if (!"POST".equalsIgnoreCase(method)) {
+                sendJson(exchange, 405, "{\"error\":\"method not allowed\"}");
+                return;
+            }
+            InspectHandler.handle(exchange);
+            return;
+        }
+
+        sendJson(exchange, 501, "{\"error\":\"not implemented yet\"}");
     }
 
     private static Filter bearerAuthFilter(String expectedAuth) {
@@ -75,7 +89,7 @@ public final class Main {
         };
     }
 
-    private static void sendJson(HttpExchange exchange, int status, String body) throws IOException {
+    static void sendJson(HttpExchange exchange, int status, String body) throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "application/json");
         exchange.sendResponseHeaders(status, bytes.length);
