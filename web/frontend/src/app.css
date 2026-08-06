@@ -1,5 +1,147 @@
 @import 'tailwindcss';
 
+/* Arimo: display headings, body copy, and all UI chrome. Latin subset
+   only — the app has no i18n plan, and pulling every Unicode range
+   (cyrillic/greek/hebrew/vietnamese) would roughly 6x the font payload
+   for scripts nothing in the UI renders. */
+@import '@fontsource/arimo/latin-400.css';
+@import '@fontsource/arimo/latin-500.css';
+@import '@fontsource/arimo/latin-700.css';
+
+/* Cousine: the raw-XML view only. */
+@import '@fontsource/cousine/latin-400.css';
+
+/*
+ * Design tokens, transcribed from the agreed mockup
+ * (mustang-design-proposal.html). Light is the default and the only
+ * theme reachable via OS/browser preference — dark is strictly an
+ * opt-in toggle scoped to [data-theme="dark"] on the app shell, set by
+ * JS (see lib/theme.svelte.ts), never by `prefers-color-scheme`.
+ */
+:root {
+  --paper: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f2f2f2;
+  --ink: #191919;
+  --muted: #5c5c5c;
+  --faint: #8c8c8c;
+  --hairline: #dcdcdc;
+  --accent: #1e4b7a;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(30, 75, 122, 0.09);
+  --accent-border: rgba(30, 75, 122, 0.35);
+  --success: #1f7a4d;
+  --success-soft: rgba(31, 122, 77, 0.1);
+  --warning: #a86a0a;
+  --warning-soft: rgba(181, 121, 10, 0.13);
+  --critical: #b23b3b;
+  --critical-soft: rgba(178, 59, 59, 0.11);
+  --shadow: rgba(27, 30, 36, 0.09);
+}
+
+[data-theme='dark'] {
+  --paper: #14171c;
+  --surface: #1a1e25;
+  --surface-2: #1f2329;
+  --ink: #eae8e1;
+  --muted: #9298a3;
+  --faint: #6b7078;
+  --hairline: #2a2e36;
+  --accent: #6fa8dc;
+  --accent-ink: #0b1520;
+  --accent-soft: rgba(111, 168, 220, 0.13);
+  --accent-border: rgba(111, 168, 220, 0.4);
+  --success: #3fa873;
+  --success-soft: rgba(63, 168, 115, 0.14);
+  --warning: #d69a2d;
+  --warning-soft: rgba(214, 154, 45, 0.14);
+  --critical: #e07272;
+  --critical-soft: rgba(224, 114, 114, 0.14);
+  --shadow: rgba(0, 0, 0, 0.45);
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-hairline: var(--hairline);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-border: var(--accent-border);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-critical: var(--critical);
+  --color-critical-soft: var(--critical-soft);
+
+  --font-sans: 'Arimo', ui-sans-serif, system-ui, Helvetica, Arial, sans-serif;
+  --font-mono: 'Cousine', ui-monospace, 'SF Mono', Consolas, monospace;
+
+  /* Type scale transcribed from the mockup's exact pixel sizes. */
+  --text-3xs: 0.5625rem;   /* 9px  */
+  --text-2xs: 0.625rem;    /* 10px */
+  --text-xs: 0.6875rem;    /* 11px */
+  --text-sm: 0.75rem;      /* 12px */
+  --text-base: 0.8125rem;  /* 13px */
+  --text-md: 0.875rem;     /* 14px */
+  --text-lg: 0.9375rem;    /* 15px */
+  --text-xl: 1.125rem;     /* 18px */
+  --text-2xl: 1.25rem;     /* 20px */
+  --text-3xl: 1.375rem;    /* 22px */
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
 body {
   margin: 0;
+  height: 100%;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+#app {
+  height: 100%;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+a {
+  color: var(--accent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

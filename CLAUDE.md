@@ -55,6 +55,7 @@ sidecar/              Java wrapper around mustangproject (Maven)
 - **Table-driven tests with `net/http/httptest`.** No mocking framework — the interfaces here (an `http.Handler`, a `*Sidecar`) are small enough that real implementations or trivial fakes are simpler than a mock.
 - **Every download is checksum-verified before use** (`internal/orchestrator/runtime.go`). Never relax this to "trust the URL."
 - **Every archive extraction guards against zip-slip/path escape** (see `isWithinDir`). This is not optional hardening — it's handling untrusted (network-delivered) input.
+- **Two output layers, never merged.** `internal/orchestrator/progress.go`'s `Reporter` is the pretty, human-facing stdout output for the default run (section headers, per-asset progress with the exact source URL always visible, checkmarks) — it's what a non-technical user sees. `log/slog` is the structured stderr layer, quiet by default (`Warn`+) and switched to `Debug` only by `--verbose`. Don't let a `slog.Info` call leak routine chatter into the default run, and don't hand-roll `fmt.Println` diagnostics that should be `slog` instead — each layer has exactly one job.
 - Run `gofmt -l .`, `go vet ./...`, and `go test ./...` clean before considering any Go change done.
 
 ## Java sidecar conventions
@@ -63,6 +64,7 @@ sidecar/              Java wrapper around mustangproject (Maven)
 - **No web framework.** `com.sun.net.httpserver.HttpServer` is enough for a single-user loopback API with a handful of endpoints. Don't add Spring/Javalin/etc. for this.
 - **Jackson (`jackson-databind`, already a dependency) for all JSON** — don't hand-roll JSON string building beyond the trivial fixed strings in health/error responses.
 - **Every non-`/healthz` route must go through the bearer-token filter.** New endpoints get added under `/api`, which already carries the filter — don't create new top-level contexts that bypass it.
+- **`POST /api/inspect`** (`InspectHandler.java`) is the reference example for new endpoints: raw PDF bytes as the request body (not multipart — there's only ever one file and no other fields, and multipart parsing isn't worth a dependency), filename via an `X-Filename` header, a hand-built DTO layer mapping mustang's `Invoice`/`CalculatedInvoice`/`ValidationContext` objects to our own JSON shape (never serialize mustang's classes directly — their shape is theirs to change). A 50MB body cap is enforced before buffering. `invoice`/`rawXml` being `null` in the response is a normal, valid outcome (a PDF with no embedded e-invoice XML), not an error — don't conflate "no embedded invoice" with "request failed."
 - **Never let this process become network-reachable beyond loopback**, and never let it make outbound network calls — mustangproject's own XSD/Schematron resolution is already fully offline (classloader resources, not HTTP); keep it that way when adding endpoints.
 - Pin mustang and Jackson versions explicitly in `pom.xml`; don't float on `LATEST`/`RELEASE`.
 - `maven-shade-plugin` filters must keep excluding `META-INF/*.SF|.DSA|.RSA` — without it the shaded jar fails signature verification at runtime (bit us once already; see git history if it recurs).
@@ -71,12 +73,20 @@ sidecar/              Java wrapper around mustangproject (Maven)
 
 Stack: **Svelte 5 (runes) + Tailwind v4 + Motion (motion.dev) + GSAP for complex sequences.** Svelte's compiled, no-vdom output means less main-thread work competing with animation frames — that's the whole reason it's the pick over React/Solid for a "60fps everywhere" requirement.
 
-**Typography**
+**The design system** (finalized; tokens live in `web/frontend/src/app.css` as CSS custom properties, wired into Tailwind's `@theme inline`, so both plain CSS and utility classes read from the same source):
 
-- Pick one text typeface and one (optional) display typeface, both variable fonts if available — fewer HTTP requests, smoother weight transitions for animated headings. Self-host or bundle; don't pull from Google Fonts at runtime (violates offline-first, and this app has no internet after setup anyway).
-- Use a proper modular type scale (e.g. a 1.2–1.25 ratio), not ad hoc pixel values. Define it once as Tailwind theme tokens, reference tokens everywhere.
-- Tabular/monospaced figures for anything numeric that updates or aligns in a column (invoice amounts, validation counts) — default proportional figures make columns of numbers visually jitter.
-- Body text: real line-height (1.5–1.6 for body copy), a measure (line length) capped around 60–75 characters for prose, not stretched full-width.
+- **Color.** Plain white (`#ffffff`) is the ground, not a warm/cream tint — deliberately Swiss/International-Typographic-Style rather than an "AI-default" cream+serif look. Ink `#191919`, muted `#5c5c5c`, faint `#8c8c8c`, hairline border `#dcdcdc`. One accent, spent sparingly (active tab, focus rings, links): a desaturated "seal" blue `#1e4b7a`. Semantic severity color (`success`/`warning`/`critical`) is a separate set of tokens from the accent — never reuse the accent hue for validation state.
+- **Dark mode is opt-in only** (`lib/theme.svelte.ts`), toggled in the titlebar, persisted to `localStorage`, applied via `data-theme="dark"` scoped to the app shell — **never** `prefers-color-scheme`. Light is what the app opens to, always, regardless of OS setting.
+- **Typography.** Arimo (400/500/700, self-hosted via `@fontsource/arimo`) for everything — display, body, UI chrome — a free, metric-compatible Helvetica/Arial alternative, not Inter/Space Grotesk (both flagged as generic "AI-default" faces). Cousine (400, `@fontsource/cousine`) is reserved *only* for the raw-XML view — don't let a monospace face leak into labels/chips/wordmarks the way an early draft of this design did.
+- Tabular figures (`font-variant-numeric: tabular-nums`, `.tabular-nums` utility) for anything numeric that aligns in a column — invoice totals, validation counts.
+- **Glass chrome over an ambient background.** The titlebar/rail/content panels use `backdrop-filter: blur(...) saturate(...)` over a `color-mix()`-based translucent background, layered above a handful of large, slowly-drifting blurred color fields (`transform`-only `@keyframes`, disabled under `prefers-reduced-motion`). The translucency is what proves the blur is real — don't make a "glass" panel that's actually opaque.
+
+**Motion**
+
+- Animate `transform` and `opacity` only for anything that needs to hit 60fps — never animate `width`/`height`/`top`/`left`/box-shadow spread on interactive/frequent transitions, they force layout/paint.
+- Respect `prefers-reduced-motion` — this is not optional polish, wire it in from the first animated component, not retrofitted later.
+- Motion should communicate state change (this validated / this failed / this is loading), not decorate for its own sake. If an animation doesn't help the user understand what just happened, cut it.
+- Spring-based transitions (Motion's default) for anything user-triggered and interruptible (panel open/close, hover states); timeline-based (GSAP) for fixed multi-step sequences (e.g. a validation-progress choreography) where you need precise sequencing.
 
 **Motion**
 
@@ -90,8 +100,6 @@ Stack: **Svelte 5 (runes) + Tailwind v4 + Motion (motion.dev) + GSAP for complex
 - This is a document-inspection tool, not a marketing site — information density and scan-ability matter more than spectacle. Animate the chrome (transitions, feedback, loading states), not the content the user is trying to read.
 - Every validation result needs both the human-readable view and one click to raw data (XML/JSON) — never make raw data harder to reach than the pretty view, that's a trust issue for a tool whose whole job is telling people whether their document is correct.
 - Accessible by default: semantic HTML, visible focus states, keyboard-operable everything (this will be used by accountants and back-office staff, not just developers).
-
-*(A concrete palette, typeface choices, and layout system are a separate design proposal — see the discussion following this scaffold. Once agreed, they get documented here as the canonical design system rather than living only in code.)*
 
 ## Clean code, generally
 
