@@ -78,51 +78,29 @@ execution. First real tag push should be treated as the true first test.
 
 ## Pending manual actions
 
-### 1. Promote `.github/release.yml` to `.github/workflows/release.yml`
+### 1. ~~Promote `.github/release.yml` to `.github/workflows/release.yml`~~ — done
 
-GitHub gates any push that touches `.github/workflows/*` behind a specific
-permission — the OAuth `workflow` scope for a normal `git push`, the
-"workflows" permission for a GitHub App using the Contents API. This
-session's credentials have neither (confirmed by trying both — a `git
-push` rejected with "refusing to allow an OAuth App to create or update
-workflow... without `workflow` scope", and a Contents API write to the
-same path returning a bare 404 while the identical write to a sibling path
-outside `workflows/` succeeded). This isn't a bug or a one-off — it's a
-deliberate GitHub security boundary against exactly this scenario
-(automated agents writing arbitrary CI code), so treat "can't push
-workflow files" as a standing constraint for this project, not something
-worth re-attempting the same way next time.
+Done 2026-08-06: a later session's push credentials did carry the
+`workflow` OAuth scope, so `git mv .github/release.yml
+.github/workflows/release.yml` + `git push` went through cleanly
+(commit `b33ea43`). `gh workflow list` now shows `Release` as `active`.
+The scope restriction noted below was real for the session that hit it,
+just not a durable constraint — check current credentials before
+assuming it still applies.
 
-The content is byte-for-byte identical, sitting at `.github/release.yml`
-(not gated — it's outside the `workflows/` directory) specifically so it
-travels with the repo instead of depending on someone having saved a file
-sent through a one-off chat attachment. To activate it:
+### 2. ~~Set `main` as the GitHub repo's default branch~~ — done
 
-```sh
-git mv .github/release.yml .github/workflows/release.yml
-git commit -m "Promote release workflow"
-git push   # ← do this step with credentials that actually have the
-           #   workflow scope/permission — the web UI's own "Add file"
-           #   flow works too, and isn't subject to this restriction
-```
-
-Do this whenever whoever's driving has real `workflow`-scoped credentials
-(a maintainer's own `git push`, or the GitHub web UI's "Add file" /
-"Edit" flow, both unaffected by this restriction) — or grant this kind of
-session's GitHub integration the `workflow` OAuth scope up front next
-time, if that's a realistic option for how it's set up.
-
-### 2. Set `main` as the GitHub repo's default branch, if desired
-
-No tool in this session's toolkit exposes that setting (it's repo admin
-configuration, not a git or Contents API operation). Settings → Branches
-→ change default branch, in GitHub's UI.
+Done 2026-08-06 via `gh repo edit --default-branch main`. The
+`claude/mustangproject-web-ui-zz2j2r` branch (which was both the
+default branch and identical to `main`) has since been deleted, both
+locally and on `origin`.
 
 ### 3. First real release
 
-Once #1 is done: push a tag matching `v*.*.*` and watch it actually run —
+Now unblocked: push a tag matching `v*.*.*` and watch it actually run —
 see the "How the release manifest was verified" caveat above about what
-was and wasn't exercised for real.
+was and wasn't exercised for real. Still nobody has watched a live run,
+so treat the first tag push as the true first test.
 
 ## Other loose ends worth knowing about
 
