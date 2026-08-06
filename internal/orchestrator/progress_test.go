@@ -40,6 +40,27 @@ func TestHumanDuration(t *testing.T) {
 	}
 }
 
+func TestReporter_BlankLineBetweenSiblingAssets(t *testing.T) {
+	var out bytes.Buffer
+	r := NewReporter(&out)
+
+	r.Section("Setting up (first run only)…")
+	first := r.Asset("Runtime (JRE)", "https://example.com/jre.tar.gz")
+	first.SubOk("checksum verified")
+	first.SubOk("extracted")
+	second := r.Asset("Sidecar", "https://example.com/sidecar.jar")
+	second.SubOk("checksum verified")
+
+	got := out.String()
+	want := "\nSetting up (first run only)…\n\n" +
+		"  Runtime (JRE)\n    https://example.com/jre.tar.gz\n    ✓ checksum verified\n    ✓ extracted\n" +
+		"\n" +
+		"  Sidecar\n    https://example.com/sidecar.jar\n    ✓ checksum verified\n"
+	if got != want {
+		t.Errorf("asset spacing mismatch:\ngot:  %q\nwant: %q", got, want)
+	}
+}
+
 func TestReporter_SectionAlwaysPrecededByBlankLine(t *testing.T) {
 	var out bytes.Buffer
 	r := NewReporter(&out)

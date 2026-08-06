@@ -35,14 +35,18 @@ The sidecar is a thin adapter, not a reimplementation: it calls `ZUGFeRDInvoiceI
 ## Repository layout
 
 ```
+.github/workflows/release.yml  tag-triggered release pipeline (see "Releasing" in README.md)
 cmd/mustang-webui/    Go entry point — flag parsing, lifecycle, signal handling
 internal/appdir/      resolves <binary dir>/mustang-webui-data/ (never an OS-wide cache dir)
-internal/orchestrator/ runtime provisioning (download+verify+extract) and sidecar process management
-internal/server/      HTTP server: static frontend + /api reverse proxy, loopback only
-web/embed.go          go:embed of web/dist into the binary
-web/dist/             built frontend (committed — see "On committing web/dist" below)
-web/frontend/         Svelte source (Vite project)
-sidecar/              Java wrapper around mustangproject (Maven)
+internal/orchestrator/ runtime provisioning (download+verify+extract), sidecar process management,
+                       manifest.go/manifest.json (placeholder in the repo; a release build overwrites
+                       manifest.json with real asset URLs+checksums before go:embed picks it up)
+internal/server/       HTTP server: static frontend + /api reverse proxy, loopback only
+web/embed.go            go:embed of web/dist into the binary
+web/dist/               built frontend — a generated artifact, but committed anyway so `go build` works
+                        without a Node toolchain present; `make build-frontend` regenerates it
+web/frontend/           Svelte source (Vite project)
+sidecar/                Java wrapper around mustangproject (Maven)
 ```
 
 ## Go orchestrator conventions
@@ -80,13 +84,6 @@ Stack: **Svelte 5 (runes) + Tailwind v4 + Motion (motion.dev) + GSAP for complex
 - **Typography.** Arimo (400/500/700, self-hosted via `@fontsource/arimo`) for everything — display, body, UI chrome — a free, metric-compatible Helvetica/Arial alternative, not Inter/Space Grotesk (both flagged as generic "AI-default" faces). Cousine (400, `@fontsource/cousine`) is reserved *only* for the raw-XML view — don't let a monospace face leak into labels/chips/wordmarks the way an early draft of this design did.
 - Tabular figures (`font-variant-numeric: tabular-nums`, `.tabular-nums` utility) for anything numeric that aligns in a column — invoice totals, validation counts.
 - **Glass chrome over an ambient background.** The titlebar/rail/content panels use `backdrop-filter: blur(...) saturate(...)` over a `color-mix()`-based translucent background, layered above a handful of large, slowly-drifting blurred color fields (`transform`-only `@keyframes`, disabled under `prefers-reduced-motion`). The translucency is what proves the blur is real — don't make a "glass" panel that's actually opaque.
-
-**Motion**
-
-- Animate `transform` and `opacity` only for anything that needs to hit 60fps — never animate `width`/`height`/`top`/`left`/box-shadow spread on interactive/frequent transitions, they force layout/paint.
-- Respect `prefers-reduced-motion` — this is not optional polish, wire it in from the first animated component, not retrofitted later.
-- Motion should communicate state change (this validated / this failed / this is loading), not decorate for its own sake. If an animation doesn't help the user understand what just happened, cut it.
-- Spring-based transitions (Motion's default) for anything user-triggered and interruptible (panel open/close, hover states); timeline-based (GSAP) for fixed multi-step sequences (e.g. a validation-progress choreography) where you need precise sequencing.
 
 **Motion**
 
