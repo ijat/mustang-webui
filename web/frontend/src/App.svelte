@@ -40,19 +40,21 @@
 </script>
 
 <main
-  class="relative min-h-screen overflow-hidden bg-paper text-ink transition-colors duration-300"
+  class="relative flex min-h-screen flex-col overflow-hidden bg-paper text-ink transition-colors duration-300"
   data-theme={theme.dark ? 'dark' : undefined}
 >
   <BackgroundBlobs />
   <TitleBar filename={file?.name ?? null} fileMeta={fileMeta} onNewFile={reset} />
 
-  {#if status === 'empty'}
-    <Dropzone onFile={handleFile} />
-  {:else if status === 'loading'}
-    <LoadingState />
-  {:else if status === 'error'}
-    <ErrorState message={errorMessage} onRetry={reset} />
-  {:else if status === 'results' && result && file}
-    <ResultsWorkspace {result} {file} />
-  {/if}
+  <div class="flex flex-1 flex-col">
+    {#if status === 'empty'}
+      <Dropzone onFile={handleFile} />
+    {:else if status === 'loading'}
+      <LoadingState />
+    {:else if status === 'error'}
+      <ErrorState message={errorMessage} onRetry={reset} />
+    {:else if status === 'results' && result && file}
+      <ResultsWorkspace {result} {file} />
+    {/if}
+  </div>
 </main>

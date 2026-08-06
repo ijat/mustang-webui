@@ -49,7 +49,7 @@
     <p class="m-0 text-base text-muted">No issues found — every check mustangproject ran came back clean.</p>
   {:else}
     <ul class="flex list-none flex-col gap-2 p-0">
-      {#each findings as finding (finding.id + finding.section + finding.message)}
+      {#each findings as finding, i (finding.id + finding.section + finding.message + i)}
         <CheckAccordionItem {finding} />
       {/each}
     </ul>
