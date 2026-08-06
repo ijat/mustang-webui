@@ -48,4 +48,4 @@ The committed `internal/orchestrator/manifest.json` is a placeholder (`{}`); onl
 
 ## License
 
-TBD — mustangproject itself is Apache-2.0; see `CLAUDE.md` for the licensing notes on bundled dependencies.
+[Business Source License 1.1](LICENSE) — free for internal, commercial, and enterprise use; the one thing not permitted is reselling mustang-webui itself or offering it as a hosted/managed service. Converts automatically to Apache License 2.0 on 2030-08-06. This governs mustang-webui's own code only — mustangproject itself is Apache-2.0, and the other bundled dependencies keep their own licenses; see `CLAUDE.md`'s "Licensing" section.
