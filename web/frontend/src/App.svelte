@@ -39,23 +39,20 @@
   const fileMeta = $derived(file ? formatBytes(file.size) : null);
 </script>
 
-<main class="flex min-h-screen items-center justify-center bg-paper px-4 py-8">
-  <div
-    class="relative w-full max-w-[1180px] overflow-hidden border border-hairline bg-surface text-ink transition-colors duration-300"
-    style={`box-shadow: 0 20px 44px -28px var(--shadow);`}
-    data-theme={theme.dark ? 'dark' : undefined}
-  >
-    <BackgroundBlobs />
-    <TitleBar filename={file?.name ?? null} fileMeta={fileMeta} />
+<main
+  class="relative min-h-screen overflow-hidden bg-paper text-ink transition-colors duration-300"
+  data-theme={theme.dark ? 'dark' : undefined}
+>
+  <BackgroundBlobs />
+  <TitleBar filename={file?.name ?? null} fileMeta={fileMeta} onNewFile={reset} />
 
-    {#if status === 'empty'}
-      <Dropzone onFile={handleFile} />
-    {:else if status === 'loading'}
-      <LoadingState />
-    {:else if status === 'error'}
-      <ErrorState message={errorMessage} onRetry={reset} />
-    {:else if status === 'results' && result && file}
-      <ResultsWorkspace {result} {file} />
-    {/if}
-  </div>
+  {#if status === 'empty'}
+    <Dropzone onFile={handleFile} />
+  {:else if status === 'loading'}
+    <LoadingState />
+  {:else if status === 'error'}
+    <ErrorState message={errorMessage} onRetry={reset} />
+  {:else if status === 'results' && result && file}
+    <ResultsWorkspace {result} {file} />
+  {/if}
 </main>

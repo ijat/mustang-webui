@@ -2,7 +2,11 @@
   import Icon from './Icon.svelte';
   import { theme } from '../theme.svelte';
 
-  let { filename = null, fileMeta = null }: { filename?: string | null; fileMeta?: string | null } = $props();
+  let {
+    filename = null,
+    fileMeta = null,
+    onNewFile,
+  }: { filename?: string | null; fileMeta?: string | null; onNewFile: () => void } = $props();
 </script>
 
 <div
@@ -23,6 +27,17 @@
     </span>
   {:else}
     <span class="flex-1"></span>
+  {/if}
+
+  {#if filename}
+    <button
+      type="button"
+      class="flex items-center gap-1.5 border border-hairline px-2.5 py-1.5 text-xs font-medium uppercase tracking-[0.04em] text-ink transition-colors hover:border-accent-border hover:bg-accent-soft"
+      onclick={onNewFile}
+    >
+      <Icon name="upload" class="h-3.5 w-3.5" />
+      New file
+    </button>
   {/if}
 
   <button
