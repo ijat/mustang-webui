@@ -1,0 +1,297 @@
+name: Release
+
+# Publishes mustang-webui as a self-provisioning single binary per
+# platform. "Single binary" per CLAUDE.md's non-negotiable #3 means the
+# user runs one executable that downloads a minimal JRE + the sidecar jar
+# on first run — this workflow is what builds and hosts those pinned,
+# checksummed assets (this project's own GitHub Release, never Maven
+# Central or Adoptium at runtime) and bakes their exact URLs + checksums
+# into each platform's binary via internal/orchestrator/manifest.json.
+#
+# Trigger: push a tag matching v*.*.* (e.g. v0.1.0), or run manually.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  JAVA_VERSION: '21'
+  GO_VERSION: '1.24'
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/frontend/package-lock.json
+
+      - name: Go — format, vet, test
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "$unformatted"
+            echo "::error::gofmt found unformatted files"
+            exit 1
+          fi
+          go vet ./...
+          go test ./...
+
+      - name: Sidecar — build
+        working-directory: sidecar
+        run: mvn -B -DskipTests package
+
+      - name: Frontend — typecheck
+        working-directory: web/frontend
+        run: |
+          npm ci
+          npm run check
+
+  sidecar:
+    name: Build sidecar jar
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: Build shaded jar
+        working-directory: sidecar
+        run: mvn -B -DskipTests package
+
+      - name: Prepare release asset
+        run: |
+          jar=$(ls sidecar/target/sidecar-*.jar | grep -v original)
+          cp "$jar" sidecar.jar
+          sha256sum sidecar.jar | cut -d' ' -f1 > sidecar.jar.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sidecar-jar
+          path: |
+            sidecar.jar
+            sidecar.jar.sha256
+
+  # Builds a minimal, jlink'd JRE per platform, natively on that
+  # platform's own GitHub-hosted runner (no cross-linking — simpler and
+  # more reliable than cross-jlinking from a single host). The module
+  # list is auto-detected from the actual sidecar jar via jdeps rather
+  # than hand-picked, plus a couple of modules jdeps can't see the need
+  # for from static analysis. The one thing that actually proves the
+  # module set is correct is starting the sidecar under the freshly
+  # linked runtime and hitting /healthz — a broken/incomplete module set
+  # fails loudly here instead of shipping silently broken to users.
+  jre:
+    name: Build JRE (${{ matrix.platform }})
+    needs: sidecar
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-amd64
+            os: ubuntu-latest
+          - platform: darwin-amd64
+            os: macos-15-intel
+          - platform: darwin-arm64
+            os: macos-14
+          - platform: windows-amd64
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: sidecar-jar
+
+      - name: Detect required modules
+        id: modules
+        shell: bash
+        run: |
+          detected=$(jdeps --multi-release "${{ env.JAVA_VERSION }}" --print-module-deps --ignore-missing-deps sidecar.jar)
+          echo "jdeps detected: $detected"
+          # jdk.crypto.ec: PDF/A digital-signature verification can use EC
+          #   algorithms jdeps' static analysis doesn't always catch.
+          # jdk.localedata: mustang's XSLT visualizer supports en/de/fr;
+          #   java.base alone only ships root/en locale data since JDK 9.
+          echo "list=${detected},jdk.crypto.ec,jdk.localedata" >> "$GITHUB_OUTPUT"
+
+      - name: jlink minimal runtime
+        shell: bash
+        run: |
+          jlink \
+            --add-modules "${{ steps.modules.outputs.list }}" \
+            --include-locales=en,de,fr \
+            --strip-debug --no-header-files --no-man-pages --compress=zip-6 \
+            --output jre-out
+
+      - name: Smoke test under the linked runtime
+        shell: bash
+        run: |
+          java_bin=jre-out/bin/java
+          if [ "${{ runner.os }}" = "Windows" ]; then java_bin=jre-out/bin/java.exe; fi
+
+          "$java_bin" -jar sidecar.jar --port 18080 --token smoketest &
+          pid=$!
+
+          healthy=false
+          for _ in $(seq 1 20); do
+            if curl -sf http://127.0.0.1:18080/healthz > /dev/null 2>&1; then
+              healthy=true
+              break
+            fi
+            sleep 0.5
+          done
+
+          kill "$pid" 2>/dev/null || true
+          if [ "$healthy" != true ]; then
+            echo "::error::sidecar did not become healthy under the jlinked runtime for ${{ matrix.platform }} — module set is likely incomplete"
+            exit 1
+          fi
+
+      - name: Package
+        shell: bash
+        run: |
+          tar -C jre-out -czf "jre-${{ matrix.platform }}.tar.gz" .
+          sha256sum "jre-${{ matrix.platform }}.tar.gz" | cut -d' ' -f1 > "jre-${{ matrix.platform }}.tar.gz.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jre-${{ matrix.platform }}
+          path: |
+            jre-${{ matrix.platform }}.tar.gz
+            jre-${{ matrix.platform }}.tar.gz.sha256
+
+  # Cross-compiles the Go binary for every platform from one Linux
+  # runner (no need for native runners here — that's a JRE/jlink
+  # constraint, not a Go one) with the real release manifest — the
+  # download URLs and checksums for the JRE/sidecar assets this same
+  # workflow run just built — baked in via go:embed.
+  binaries:
+    name: Build Go binaries
+    needs: [sidecar, jre]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: jre-*
+          path: assets
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: sidecar-jar
+          path: assets
+
+      - name: Assemble manifest.json
+        shell: bash
+        run: |
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
+          sidecar_sha=$(cat assets/sidecar.jar.sha256)
+
+          {
+            echo "{"
+            echo "  \"runtime\": {"
+            first=true
+            for platform in linux-amd64 darwin-amd64 darwin-arm64 windows-amd64; do
+              sha=$(cat "assets/jre-${platform}.tar.gz.sha256")
+              if [ "$first" != true ]; then echo ","; fi
+              first=false
+              printf '    "%s": {"url": "%s/jre-%s.tar.gz", "sha256": "%s"}' "$platform" "$base" "$platform" "$sha"
+            done
+            echo ""
+            echo "  },"
+            echo "  \"sidecar\": {\"url\": \"${base}/sidecar.jar\", \"sha256\": \"${sidecar_sha}\"}"
+            echo "}"
+          } > internal/orchestrator/manifest.json
+
+          cat internal/orchestrator/manifest.json
+          python3 -c "import json; json.load(open('internal/orchestrator/manifest.json'))"
+
+      - name: Build binaries
+        shell: bash
+        run: |
+          mkdir -p dist
+          build() {
+            platform=$1 goos=$2 goarch=$3 ext=$4
+            echo "Building ${platform}..."
+            GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 \
+              go build -trimpath -ldflags="-s -w" -o "dist/mustang-webui-${platform}${ext}" ./cmd/mustang-webui
+          }
+          build linux-amd64   linux   amd64 ""
+          build darwin-amd64  darwin  amd64 ""
+          build darwin-arm64  darwin  arm64 ""
+          build windows-amd64 windows amd64 ".exe"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binaries
+          path: dist/*
+
+  release:
+    name: Publish release
+    needs: [sidecar, jre, binaries]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: jre-*
+          path: assets
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: sidecar-jar
+          path: assets
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: binaries
+          path: assets
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: assets/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true
