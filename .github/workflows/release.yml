@@ -8,10 +8,17 @@ name: Release
 # Central or Adoptium at runtime) and bakes their exact URLs + checksums
 # into each platform's binary via internal/orchestrator/manifest.json.
 #
-# Trigger: push a tag matching v*.*.* (e.g. v0.1.0), or run manually.
+# Trigger: push a tag matching v*.*.* (e.g. v0.1.0), a push to main, or
+# run manually. A tag push publishes a normal release under that tag;
+# anything else (main push, manual dispatch off a branch) publishes/
+# updates a prerelease tagged "main" — action-gh-release requires an
+# explicit tag when the ref itself isn't a tag, and marking it prerelease
+# keeps it from displacing real vX.Y.Z releases as GitHub's "Latest".
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*.*.*'
   workflow_dispatch:
@@ -296,6 +303,8 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'main' }}
+          prerelease: ${{ github.ref_type != 'tag' }}
           files: assets/*
           generate_release_notes: true
           fail_on_unmatched_files: true
