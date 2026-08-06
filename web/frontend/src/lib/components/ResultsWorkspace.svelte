@@ -3,16 +3,18 @@
   import HumanReadablePanel from './HumanReadablePanel.svelte';
   import RawXmlPanel from './RawXmlPanel.svelte';
   import PdfPreviewPanel from './PdfPreviewPanel.svelte';
+  import PdfMetadataPanel from './PdfMetadataPanel.svelte';
   import { fadeIn } from '../motion';
   import type { InspectResponse } from '../types';
 
   let { result, file }: { result: InspectResponse; file: File } = $props();
 
-  type TabId = 'human' | 'xml' | 'preview';
+  type TabId = 'human' | 'xml' | 'preview' | 'metadata';
   const tabs: { id: TabId; label: string }[] = [
     { id: 'human', label: 'Human-readable' },
     { id: 'xml', label: 'Raw XML' },
     { id: 'preview', label: 'PDF preview' },
+    { id: 'metadata', label: 'PDF metadata' },
   ];
 
   let active = $state<TabId>('human');
@@ -27,7 +29,7 @@
   }
 </script>
 
-<div class="grid min-h-[560px] grid-cols-1 sm:grid-cols-[280px_1fr]">
+<div class="grid min-h-[560px] flex-1 grid-cols-1 sm:grid-cols-[280px_1fr]">
   <ValidationRail findings={result.findings} valid={result.valid} />
 
   <main
@@ -68,8 +70,10 @@
           <HumanReadablePanel invoice={result.invoice} />
         {:else if active === 'xml'}
           <RawXmlPanel rawXml={result.rawXml} />
-        {:else}
+        {:else if active === 'preview'}
           <PdfPreviewPanel {file} />
+        {:else}
+          <PdfMetadataPanel metadata={result.metadata} />
         {/if}
       </div>
     {/key}

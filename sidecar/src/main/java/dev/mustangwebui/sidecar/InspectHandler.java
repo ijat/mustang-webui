@@ -3,6 +3,13 @@ package dev.mustangwebui.sidecar;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDDocumentInformation;
+import org.apache.pdfbox.pdmodel.PDDocumentNameDictionary;
+import org.apache.pdfbox.pdmodel.PDEmbeddedFilesNameTreeNode;
+import org.apache.pdfbox.pdmodel.common.PDMetadata;
+import org.apache.pdfbox.pdmodel.common.filespecification.PDComplexFileSpecification;
 import org.mustangproject.CalculatedInvoice;
 import org.mustangproject.TradeParty;
 import org.mustangproject.ZUGFeRD.IZUGFeRDExportableItem;
@@ -12,6 +19,19 @@ import org.mustangproject.util.ByteArraySearcher;
 import org.mustangproject.validator.ValidationContext;
 import org.mustangproject.validator.ValidationResultItem;
 import org.mustangproject.validator.ZUGFeRDValidator;
+import org.verapdf.features.FeatureFactory;
+import org.verapdf.gf.foundry.VeraGreenfieldFoundryProvider;
+import org.verapdf.metadata.fixer.FixerFactory;
+import org.verapdf.pdfa.flavours.PDFAFlavour;
+import org.verapdf.pdfa.results.ValidationResult;
+import org.verapdf.pdfa.validation.validators.ValidatorFactory;
+import org.verapdf.processor.ItemProcessor;
+import org.verapdf.processor.ProcessorConfig;
+import org.verapdf.processor.ProcessorFactory;
+import org.verapdf.processor.ProcessorResult;
+import org.verapdf.processor.TaskType;
+import org.verapdf.processor.plugins.PluginsCollectionConfig;
+import org.verapdf.processor.reports.ItemDetails;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -22,8 +42,12 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Date;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -112,8 +136,10 @@ final class InspectHandler {
             }
         }
 
+        PdfMetadataDto metadata = extractPdfMetadata(pdfBytes, filename);
+
         InspectResponse response = new InspectResponse(
-                filename, pdfBytes.length, valid, profile, findings, invoiceDto, rawXml);
+                filename, pdfBytes.length, valid, profile, findings, invoiceDto, rawXml, metadata);
         Main.sendJson(exchange, 200, MAPPER.writeValueAsString(response));
     }
 
@@ -186,6 +212,90 @@ final class InspectHandler {
         return new SimpleDateFormat("yyyy-MM-dd").format(date);
     }
 
+    private static String formatDate(Calendar calendar) {
+        return calendar == null ? null : formatDate(calendar.getTime());
+    }
+
+    private static PdfMetadataDto extractPdfMetadata(byte[] pdfBytes, String filename) {
+        try {
+            return doExtractPdfMetadata(pdfBytes, filename);
+        } catch (Exception e) {
+            LOGGER.log(Level.INFO, "could not extract PDF metadata from uploaded file", e);
+            return null;
+        }
+    }
+
+    private static PdfMetadataDto doExtractPdfMetadata(byte[] pdfBytes, String filename) throws IOException {
+        int pageCount;
+        String pdfVersion;
+        boolean encrypted;
+        String producer;
+        String creator;
+        String creationDate;
+        boolean hasXmpMetadata;
+        List<String> embeddedFiles = new ArrayList<>();
+
+        try (PDDocument doc = Loader.loadPDF(pdfBytes)) {
+            pageCount = doc.getNumberOfPages();
+            pdfVersion = String.valueOf(doc.getVersion());
+            encrypted = doc.isEncrypted();
+
+            PDDocumentInformation info = doc.getDocumentInformation();
+            producer = info == null ? null : info.getProducer();
+            creator = info == null ? null : info.getCreator();
+            creationDate = info == null ? null : formatDate(info.getCreationDate());
+
+            PDMetadata xmp = doc.getDocumentCatalog().getMetadata();
+            hasXmpMetadata = xmp != null;
+
+            PDEmbeddedFilesNameTreeNode embeddedTree =
+                    new PDDocumentNameDictionary(doc.getDocumentCatalog()).getEmbeddedFiles();
+            if (embeddedTree != null) {
+                Map<String, PDComplexFileSpecification> names = embeddedTree.getNames();
+                if (names != null) {
+                    embeddedFiles.addAll(names.keySet());
+                }
+            }
+        }
+
+        // mustang's own ZUGFeRDValidator already runs this exact veraPDF pass
+        // internally (PDFValidator), but ValidationContext.clear() discards the
+        // typed PDFAFlavour/compliance result before validate() returns — only a
+        // pass/fail ValidationResultItem survives. veraPDF is the same library
+        // mustang delegates PDF/A conformance checking to, so calling it directly
+        // here (at the cost of running PDF/A validation twice per request) reads
+        // the typed result rather than reimplementing PDF/A logic ourselves.
+        VeraGreenfieldFoundryProvider.initialise();
+        ProcessorConfig processorConfig = ProcessorFactory.fromValues(
+                ValidatorFactory.defaultConfig(), FeatureFactory.defaultConfig(),
+                PluginsCollectionConfig.defaultConfig(), FixerFactory.defaultConfig(),
+                EnumSet.of(TaskType.VALIDATE));
+
+        String pdfaFlavour = null;
+        boolean pdfaCompliant = false;
+        try (ItemProcessor processor = ProcessorFactory.createProcessor(processorConfig)) {
+            ProcessorResult result = processor.process(
+                    ItemDetails.fromValues(filename), new ByteArrayInputStream(pdfBytes));
+            List<ValidationResult> results = result.getValidationResults();
+            if (!results.isEmpty()) {
+                ValidationResult vr = results.get(0);
+                pdfaCompliant = vr.isCompliant();
+                PDFAFlavour flavour = vr.getPDFAFlavour();
+                if (flavour != null && flavour != PDFAFlavour.NO_FLAVOUR) {
+                    Integer partNumber = flavour.getPart().getPartNumber();
+                    String levelCode = flavour.getLevel().getCode();
+                    if (partNumber != null) {
+                        pdfaFlavour = "PDF/A-" + partNumber
+                                + (levelCode == null ? "" : levelCode.toUpperCase(Locale.ROOT));
+                    }
+                }
+            }
+        }
+
+        return new PdfMetadataDto(pageCount, pdfVersion, encrypted, producer, creator, creationDate,
+                hasXmpMetadata, embeddedFiles, pdfaFlavour, pdfaCompliant);
+    }
+
     private static final class BodyTooLargeException extends Exception {
     }
 
@@ -209,8 +319,13 @@ final class InspectHandler {
                        PartyDto seller, PartyDto buyer, List<LineItemDto> lineItems, TotalsDto totals) {
     }
 
+    record PdfMetadataDto(int pageCount, String pdfVersion, boolean encrypted, String producer, String creator,
+                           String creationDate, boolean hasXmpMetadata, List<String> embeddedFiles,
+                           String pdfaFlavour, boolean pdfaCompliant) {
+    }
+
     record InspectResponse(String filename, long sizeBytes, boolean valid, String profile,
-                            List<FindingDto> findings, InvoiceDto invoice, String rawXml) {
+                            List<FindingDto> findings, InvoiceDto invoice, String rawXml, PdfMetadataDto metadata) {
     }
 
     private InspectHandler() {

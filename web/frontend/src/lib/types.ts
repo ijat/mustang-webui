@@ -45,6 +45,19 @@ export interface Invoice {
   totals: Totals;
 }
 
+export interface PdfMetadata {
+  pageCount: number;
+  pdfVersion: string;
+  encrypted: boolean;
+  producer: string | null;
+  creator: string | null;
+  creationDate: string | null;
+  hasXmpMetadata: boolean;
+  embeddedFiles: string[];
+  pdfaFlavour: string | null;
+  pdfaCompliant: boolean;
+}
+
 export interface InspectResponse {
   filename: string;
   sizeBytes: number;
@@ -53,6 +66,7 @@ export interface InspectResponse {
   findings: Finding[];
   invoice: Invoice | null;
   rawXml: string | null;
+  metadata: PdfMetadata | null;
 }
 
 export interface ApiError {
