@@ -6,7 +6,7 @@ Run the binary, it opens a browser tab, you drop in a PDF, it tells you whether 
 
 ## Status
 
-The core loop works end to end: drop a PDF, it's validated by mustangproject and rendered in the UI. Release packaging (a single downloadable binary per platform, self-provisioning its own JVM) is wired up via CI — see [Releasing](#releasing) below.
+The core loop works end to end: drop a PDF, it's validated by mustangproject and rendered in the UI. Release packaging (a single downloadable binary per platform, self-provisioning its own JVM) is wired up via CI — see [Releasing](#releasing) below. See `PLAYBOOK.md` for current handoff status and pending manual steps (there's at least one: the release workflow needs a one-line promotion from a maintainer with the right GitHub permissions before it's live).
 
 ## Architecture
 
