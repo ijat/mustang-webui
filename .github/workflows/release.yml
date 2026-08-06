@@ -11,9 +11,14 @@ name: Release
 # Trigger: push a tag matching v*.*.* (e.g. v0.1.0), a push to main, or
 # run manually. A tag push publishes a normal release under that tag;
 # anything else (main push, manual dispatch off a branch) publishes/
-# updates a prerelease tagged "main" — action-gh-release requires an
-# explicit tag when the ref itself isn't a tag, and marking it prerelease
-# keeps it from displacing real vX.Y.Z releases as GitHub's "Latest".
+# updates a prerelease tagged "rolling-main" — action-gh-release
+# requires an explicit tag when the ref itself isn't a tag, and marking
+# it prerelease keeps it from displacing real vX.Y.Z releases as
+# GitHub's "Latest". Deliberately NOT tagged "main": action-gh-release
+# creates a real git tag matching tag_name, and a tag named "main"
+# collides with the main branch (ambiguous refs/heads/main vs.
+# refs/tags/main — broke a plain `git push origin main` when this was
+# first tried).
 
 on:
   push:
@@ -235,7 +240,16 @@ jobs:
       - name: Assemble manifest.json
         shell: bash
         run: |
-          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
+          # Must match the "Create release" step's tag_name below — the
+          # release tag isn't always GITHUB_REF_NAME (e.g. a main push
+          # has GITHUB_REF_NAME=main but publishes under a distinct
+          # rolling-main tag, kept apart from the main branch name to
+          # avoid a git ref collision between refs/heads/main and
+          # refs/tags/main — see git history around commit 505e941 for
+          # the incident that taught us this the hard way).
+          release_tag="${GITHUB_REF_TYPE}"
+          if [ "$release_tag" = "tag" ]; then release_tag="${GITHUB_REF_NAME}"; else release_tag="rolling-main"; fi
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${release_tag}"
           sidecar_sha=$(cat assets/sidecar.jar.sha256)
 
           {
@@ -303,7 +317,7 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'main' }}
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'rolling-main' }}
           prerelease: ${{ github.ref_type != 'tag' }}
           files: assets/*
           generate_release_notes: true
