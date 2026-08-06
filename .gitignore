@@ -1,6 +1,10 @@
 # Go build output
 /bin/
 
+# Provisioned runtime — see internal/appdir. Created next to the binary
+# at run time (also lands at repo root during `go run`/local dev).
+/mustang-webui-data/
+
 # Maven build output
 sidecar/target/
 sidecar/dependency-reduced-pom.xml

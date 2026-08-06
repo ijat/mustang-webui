@@ -8,8 +8,9 @@ These are the constraints the whole design serves. Any change that violates one 
 
 1. **mustangproject is the source of truth.** We never reimplement CII/UBL parsing, PDF/A validation, or Schematron rule logic. The Java sidecar calls mustangproject's public library API directly and does nothing more than translate the result to JSON.
 2. **Everything after setup is offline.** The orchestrator and the sidecar bind to `127.0.0.1` only — never `0.0.0.0`, never a LAN-visible address. The only network call in the entire app is the one-time asset download on first run (see below); disable that path (`--dev`, or a future `--offline` release mode with pre-provisioned assets) and the app makes zero network calls.
-3. **Single binary, self-provisioning.** The user runs one executable. It downloads what it needs (a minimal JRE + the sidecar jar, from this project's own release assets — never Maven Central or Adoptium directly at runtime, so there's one origin to trust) into a per-user cache, and every subsequent run is instant. A JVM dependency is unavoidable given (1); "single binary" means single *thing the user runs*, not literally zero runtime dependencies. Don't try to make this literal by vendoring a fat 150MB+ binary unless we explicitly decide that trade-off is worth it.
+3. **Single binary, self-provisioning.** The user runs one executable. It downloads what it needs (a minimal JRE + the sidecar jar, from this project's own release assets — never Maven Central or Adoptium directly at runtime, so there's one origin to trust) into a subfolder next to the binary itself, and every subsequent run is instant. A JVM dependency is unavoidable given (1); "single binary" means single *thing the user runs*, not literally zero runtime dependencies. Don't try to make this literal by vendoring a fat 150MB+ binary unless we explicitly decide that trade-off is worth it.
 4. **No Claude/Anthropic visual identity.** This product has its own design language. Don't reach for Claude's oranges/creams or its typefaces out of habit.
+5. **Portable, not OS-integrated.** Everything the app writes — the provisioned runtime, partial downloads, extraction staging — stays inside `<binary dir>/mustang-webui-data/`. Never `os.UserCacheDir()`, never `os.TempDir()`, never anywhere outside the binary's own directory. Moving or deleting that one folder should take the whole install with it, with nothing left behind elsewhere on the machine.
 
 ## Architecture
 
@@ -17,7 +18,7 @@ These are the constraints the whole design serves. Any change that violates one 
 mustang-webui (Go, single binary)
   │
   ├─ on first run: downloads + checksums a jlink JRE and sidecar.jar into
-  │  the user cache dir, from this project's own release assets
+  │  <binary dir>/mustang-webui-data/, from this project's own release assets
   │
   ├─ spawns sidecar.jar as a subprocess (127.0.0.1, random port, random
   │  per-launch bearer token) and waits for /healthz
@@ -35,7 +36,7 @@ The sidecar is a thin adapter, not a reimplementation: it calls `ZUGFeRDInvoiceI
 
 ```
 cmd/mustang-webui/    Go entry point — flag parsing, lifecycle, signal handling
-internal/appdir/      per-user cache dir resolution
+internal/appdir/      resolves <binary dir>/mustang-webui-data/ (never an OS-wide cache dir)
 internal/orchestrator/ runtime provisioning (download+verify+extract) and sidecar process management
 internal/server/      HTTP server: static frontend + /api reverse proxy, loopback only
 web/embed.go          go:embed of web/dist into the binary
