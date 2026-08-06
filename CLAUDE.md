@@ -107,7 +107,9 @@ Stack: **Svelte 5 (runes) + Tailwind v4 + Motion (motion.dev) + GSAP for complex
 
 ## Licensing
 
-mustangproject core is Apache-2.0. Bundled/transitive pieces we redistribute: PDFBox (Apache-2.0), veraPDF (MPL 2.0), Saxon-HE (MPL 2.0), ph-schematron (Apache-2.0), DOM4j (BSD), Apache FOP (Apache-2.0) — all permissive. **The EN16931 Schematron validation artefacts are EUPL-2.0** (the one non-Apache/BSD/MPL license in the tree) — permits redistribution, just needs its own attribution. The bundled JRE (Adoptium/OpenJDK builds) is GPLv2+Classpath-Exception, which explicitly permits redistributing a custom `jlink` runtime image. Before a public release: ship an in-app "licenses" page carrying forward mustangproject's `NOTICE` file plus these attributions.
+**This project's own code** (the Go orchestrator, the Java sidecar wrapper, the Svelte frontend) is [Business Source License 1.1](LICENSE) — free for internal, commercial, and enterprise use; not licensed for reselling mustang-webui itself or offering it as a hosted/managed service. Converts to Apache License 2.0 automatically on the Change Date in `LICENSE`. This is a deliberate choice, not a default — don't relicense the repo, add a second license file, or change the Additional Use Grant without that being an explicit, discussed decision; it's the kind of thing that's expensive to walk back once someone's built on it.
+
+**Third-party/bundled code keeps its own license**, unaffected by the above: mustangproject core is Apache-2.0. Bundled/transitive pieces we redistribute: PDFBox (Apache-2.0), veraPDF (MPL 2.0), Saxon-HE (MPL 2.0), ph-schematron (Apache-2.0), DOM4j (BSD), Apache FOP (Apache-2.0) — all permissive. **The EN16931 Schematron validation artefacts are EUPL-2.0** (the one non-Apache/BSD/MPL license in the tree) — permits redistribution, just needs its own attribution. The bundled JRE (Adoptium/OpenJDK builds) is GPLv2+Classpath-Exception, which explicitly permits redistributing a custom `jlink` runtime image. Before a public release: ship an in-app "licenses" page carrying forward mustangproject's `NOTICE` file plus these attributions.
 
 ## Build & dev commands
 
