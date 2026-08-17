@@ -5,9 +5,12 @@
   import PdfPreviewPanel from './PdfPreviewPanel.svelte';
   import PdfMetadataPanel from './PdfMetadataPanel.svelte';
   import { fadeIn } from '../motion';
+  import { describeFormat } from '../eInvoiceFormat';
   import type { InspectResponse } from '../types';
 
   let { result, file }: { result: InspectResponse; file: File } = $props();
+
+  const format = $derived(describeFormat(result));
 
   type TabId = 'human' | 'xml' | 'preview' | 'metadata';
   const tabs: { id: TabId; label: string }[] = [
@@ -30,7 +33,7 @@
 </script>
 
 <div class="grid min-h-[560px] flex-1 grid-cols-1 sm:grid-cols-[280px_1fr]">
-  <ValidationRail findings={result.findings} valid={result.valid} />
+  <ValidationRail findings={result.findings} valid={result.valid} {format} />
 
   <main
     class="relative z-10 min-w-0 px-6.5 py-[22px] pb-[30px]"

@@ -93,14 +93,14 @@ final class InspectHandler {
         }
 
         boolean valid;
-        String profile;
+        FormatDto format;
         List<FindingDto> findings;
         try {
             ZUGFeRDValidator validator = new ZUGFeRDValidator();
             validator.validate(pdfBytes, filename);
             ValidationContext context = validator.getContext();
             valid = context.isValid();
-            profile = context.getProfile();
+            format = new FormatDto(context.getProfile(), context.getGeneration(), context.getFormat());
             findings = new ArrayList<>();
             for (ValidationResultItem item : context.getResults()) {
                 findings.add(new FindingDto(
@@ -144,7 +144,7 @@ final class InspectHandler {
         PdfMetadataDto metadata = extractPdfMetadata(pdfBytes, filename);
 
         InspectResponse response = new InspectResponse(
-                filename, pdfBytes.length, valid, profile, findings, invoiceDto, rawXml, metadata);
+                filename, pdfBytes.length, valid, format, findings, invoiceDto, rawXml, metadata);
         Main.sendJson(exchange, 200, MAPPER.writeValueAsString(response));
     }
 
@@ -407,7 +407,19 @@ final class InspectHandler {
                            String pdfaFlavour, boolean pdfaCompliant) {
     }
 
-    record InspectResponse(String filename, long sizeBytes, boolean valid, String profile,
+    /**
+     * The three identifiers mustang's validator derives from the embedded XML
+     * itself: {@code specificationId} is the verbatim
+     * GuidelineSpecifiedDocumentContextParameter/ID URN (the one thing that
+     * actually names the standard and profile — e.g.
+     * {@code urn:cen.eu:en16931:2017#compliant#urn:factur-x.eu:1p0:basic}),
+     * {@code generation} is the ZUGFeRD generation ("1"/"2"), {@code syntax} is
+     * "CII" or "UBL". Naming them is the frontend's job, not this module's.
+     */
+    record FormatDto(String specificationId, String generation, String syntax) {
+    }
+
+    record InspectResponse(String filename, long sizeBytes, boolean valid, FormatDto format,
                             List<FindingDto> findings, InvoiceDto invoice, String rawXml, PdfMetadataDto metadata) {
     }
 

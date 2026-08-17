@@ -7,6 +7,7 @@
   import ResultsWorkspace from './lib/components/ResultsWorkspace.svelte';
   import { theme } from './lib/theme.svelte';
   import { inspectPdf, ApiRequestError } from './lib/api';
+  import { describeFormat } from './lib/eInvoiceFormat';
   import { formatBytes } from './lib/format';
   import type { InspectResponse } from './lib/types';
 
@@ -37,6 +38,13 @@
   }
 
   const fileMeta = $derived(file ? formatBytes(file.size) : null);
+
+  const formatLabel = $derived.by(() => {
+    if (status !== 'results' || !result) return null;
+    const format = describeFormat(result);
+    if (!format) return 'No e-invoice XML';
+    return [format.standard, format.profileLevel].filter(Boolean).join(' · ');
+  });
 </script>
 
 <main
@@ -44,7 +52,7 @@
   data-theme={theme.dark ? 'dark' : undefined}
 >
   <BackgroundBlobs />
-  <TitleBar filename={file?.name ?? null} fileMeta={fileMeta} onNewFile={reset} />
+  <TitleBar filename={file?.name ?? null} fileMeta={fileMeta} {formatLabel} onNewFile={reset} />
 
   <div class="flex flex-1 flex-col">
     {#if status === 'empty'}

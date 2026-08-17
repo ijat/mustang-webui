@@ -82,11 +82,17 @@ export interface PdfMetadata {
   pdfaCompliant: boolean;
 }
 
+export interface DocumentFormat {
+  specificationId: string | null;
+  generation: string | null;
+  syntax: string | null;
+}
+
 export interface InspectResponse {
   filename: string;
   sizeBytes: number;
   valid: boolean;
-  profile: string | null;
+  format: DocumentFormat | null;
   findings: Finding[];
   invoice: Invoice | null;
   rawXml: string | null;
