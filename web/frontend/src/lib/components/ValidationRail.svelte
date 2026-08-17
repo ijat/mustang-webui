@@ -1,10 +1,16 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
   import CheckAccordionItem from './CheckAccordionItem.svelte';
+  import FormatCard from './FormatCard.svelte';
   import { severityTier } from '../findings';
+  import type { FormatDescription } from '../eInvoiceFormat';
   import type { Finding } from '../types';
 
-  let { findings, valid }: { findings: Finding[]; valid: boolean } = $props();
+  let {
+    findings,
+    valid,
+    format,
+  }: { findings: Finding[]; valid: boolean; format: FormatDescription | null } = $props();
 
   const notices = $derived(findings.filter((f) => severityTier(f.severity) === 'notice'));
   const warnings = $derived(findings.filter((f) => severityTier(f.severity) === 'warning'));
@@ -15,6 +21,8 @@
   class="relative z-10 border-r border-hairline px-5 py-[22px]"
   style="background: color-mix(in srgb, var(--surface-2) 58%, transparent); backdrop-filter: blur(16px) saturate(160%); -webkit-backdrop-filter: blur(16px) saturate(160%);"
 >
+  <FormatCard {format} />
+
   <div
     class="mb-[22px] flex items-center gap-2 border px-3 py-2.5 text-base font-medium"
     class:border-success-soft={valid}

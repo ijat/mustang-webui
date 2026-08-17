@@ -5,8 +5,14 @@
   let {
     filename = null,
     fileMeta = null,
+    formatLabel = null,
     onNewFile,
-  }: { filename?: string | null; fileMeta?: string | null; onNewFile: () => void } = $props();
+  }: {
+    filename?: string | null;
+    fileMeta?: string | null;
+    formatLabel?: string | null;
+    onNewFile: () => void;
+  } = $props();
 </script>
 
 <div
@@ -27,6 +33,14 @@
     </span>
   {:else}
     <span class="flex-1"></span>
+  {/if}
+
+  {#if formatLabel}
+    <span
+      class="hidden flex-none border border-accent-border bg-accent-soft px-2.5 py-1 text-xs font-medium tracking-[0.02em] text-accent sm:inline-block"
+    >
+      {formatLabel}
+    </span>
   {/if}
 
   {#if filename}
